@@ -14,13 +14,13 @@ private class SQLQueryTool{
     
     public func sendQuery(queryInfo: TransactionInfo) {
         let formatter = DateFormatter()
-        guard let transactionDate = queryInfo.transactionDate else { return }
+        let transactionDate = queryInfo.transactionDate
         formatter.dateFormat = "dd.MM.YYYY hh:mm"
         let dateText = formatter.string(from: transactionDate)
         print("""
               A new entry to the database:
               INSERT INTO Transactions(sender_account, receiver_account, date, sum, currency)
-              VALUES (\(queryInfo.senderAccountNumber!),\(queryInfo.receiverAcountNumber!),\(dateText),\(queryInfo.amountOfMoney!),\(queryInfo.currency!.rawValue))
+              VALUES (\(queryInfo.senderAccountNumber),\(queryInfo.receiverAcountNumber),\(dateText),\(queryInfo.amountOfMoney),\(queryInfo.currency.rawValue))
               """)
     }
 }
@@ -35,33 +35,26 @@ extension SQLQueryTool: NSCopying {
 private class BillCreator{
     func createBill(info: TransactionInfo) -> String {
         let formatter = DateFormatter()
-        guard let transactionDate = info.transactionDate else { return "ERROR. INVALID DATE!"}
+        let transactionDate = info.transactionDate
         formatter.dateFormat = "dd.MM.YYYY hh:mm"
         let dateText = formatter.string(from: transactionDate)
         let bill = """
-        № счёта: \(info.senderAccountNumber!)
+        № счёта: \(info.senderAccountNumber)
         Банк: ООО Лорем Ипсум Банк
         Дата: \(dateText)
-        Сумма: \(info.amountOfMoney!) \(info.currency!.rawValue)
+        Сумма: \(info.amountOfMoney) \(info.currency.rawValue)
         """
         return bill
     }
 }
 
 //Особый класс, который используется вышеупомянутыми инструментами
-private class TransactionInfo{
-    var senderAccountNumber: Int?
-    var receiverAcountNumber: Int?
-    var amountOfMoney: Int?
-    var currency: Currencies?
-    var transactionDate: Date?
-    init(senderAccountNumber: Int, receiverAccountNumber: Int, transactionDate: Date, amountOfMoney: Int, currency: Currencies) {
-        self.senderAccountNumber = senderAccountNumber
-        self.receiverAcountNumber = receiverAccountNumber
-        self.amountOfMoney = amountOfMoney
-        self.transactionDate = transactionDate
-        self.currency = currency
-    }
+private struct TransactionInfo{
+    var senderAccountNumber: Int
+    var receiverAcountNumber: Int
+    var amountOfMoney: Int
+    var currency: Currencies
+    var transactionDate: Date
 }
 
 //Валюты
@@ -69,27 +62,51 @@ enum Currencies: String {
 case rouble = "RUB"
 case dollar = "USD"
 case euro = "EUR"
+case error = "INVALID CURRENCY CODE!!!"
 }
-
+// Протокол фасада
+protocol BankingToolKitProtocol {
+    func processTransaction(senderAccount: Int, receiverAccount: Int, sum: Int, currencyCode: Int)
+    func transformCodeIntoCurrency(code: Int)->Currencies
+}
 //Класс BankingToolKit и является фасадом для работы с вышеупомянутыми инструментами
-class BankingToolKit{
-    func processTransaction(senderAccount: Int, receiverAccount: Int, sum: Int, currency: Currencies){
+class BankingToolKit: BankingToolKitProtocol{
+    func processTransaction(senderAccount: Int, receiverAccount: Int, sum: Int, currencyCode: Int){
         let date = Date()
-        let info = TransactionInfo(senderAccountNumber: senderAccount, receiverAccountNumber: receiverAccount, transactionDate: date, amountOfMoney: sum, currency: currency)
+        let currency = transformCodeIntoCurrency(code: currencyCode)
+        let info = TransactionInfo(senderAccountNumber: senderAccount, receiverAcountNumber: receiverAccount, amountOfMoney: sum, currency: currency, transactionDate: date)
         let sql = SQLQueryTool.shared
         sql.sendQuery(queryInfo: info)
         let billCreator = BillCreator()
         billCreator.createBill(info: info)
     }
+    
+    func transformCodeIntoCurrency(code: Int)->Currencies{
+        if code == 1{
+            return Currencies.rouble
+        }else if code == 2{
+            return Currencies.dollar
+        }else if code == 3{
+            return Currencies.euro
+        }else{
+            return Currencies.error
+        }
+    }
 }
 
 //Клиентский код, который не зависит от всех внешних классов, а только от фасада.
 class TestingFacade{
+    var bankingToolKit: BankingToolKitProtocol?
+    
+    init(bankingToolKit: BankingToolKitProtocol) {
+        self.bankingToolKit = bankingToolKit
+        
+        testTransaction()
+    }
+    
     func testTransaction(){
-        let bankingToolKit = BankingToolKit()
-        bankingToolKit.processTransaction(senderAccount: 118853975, receiverAccount: 864551500, sum: 5000, currency: .rouble)
+        self.bankingToolKit?.processTransaction(senderAccount: 118853975, receiverAccount: 864551500, sum: 5000, currencyCode: 1)
     }
 }
-
-let testing = TestingFacade()
-testing.testTransaction()
+let bankingToolKit = BankingToolKit()
+let testing = TestingFacade(bankingToolKit: bankingToolKit)
