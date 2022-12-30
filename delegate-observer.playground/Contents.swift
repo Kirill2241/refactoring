@@ -1,82 +1,99 @@
 import UIKit
 
 class Writer{
-    var agency: BookAgencyObservableProtocol?
+    var agency: BookAgency?
     func writeABook(){
         print("I wrote a book.")
-        agency?.receiveABook()
+        agency?.receiveABookFromWriter()
     }
 }
 
 //Протокол для Объекта. Содержит возможность добавить Наблюдателя, удалить его или уведомить их
 protocol BookAgencyObservableProtocol {
-    
-    func addEmployee(_ employee: BookAgencyEmployee)
+    func addEmployee(_ employee: BasicEmployee)
     func removeEmployee(_ employee: BookAgencyEmployee)
     func notifyEmployees()
-    func receiveABook()
 }
 
-//Протокол для Наблюдателя. Числовая переменная добавлена для того чтобы их было проще удалять. Также содержит метод, срабатывающий при изменении переменной в Объекте.
-protocol BookAgencyEmployee: class {
-    var employeeNumber: Int? { get set }
-    init(employeeNumber: Int)
-    func numberOfBooksIncreased()
-}
-protocol GramaryCheckerProtocol: class{
-    func checkGramary()->GramaryCheckResults
-}
-
-protocol BookPublisherProtocol: class{
-    func publish()
-}
-
-//Реализация протокола для Объекта. Важно, чтобы протокол унаследовался именно классом, потому что структура - это не ссылочный тип
-class BookAgency: BookAgencyObservableProtocol{
-    //Хранилище Наблюдателей - массив слабых ссылок
-    private var employees: [() -> BookAgencyEmployee?] = []
-    
-    //Кол-во книг над которыми работает агенство - переменная, которую отслеживают Наблюдатели.
-    private var numberOfBooks : Int {
-            didSet {
-                self.notifyEmployees()
-            }
+//Реализация протокола для Объекта. Работает с generic'ами.
+class ObservableClass<T>: BookAgencyObservableProtocol {
+    internal var employees: [Weak<BasicEmployee>] = []
+    //Переменная, за которой "ведётся наблюдение"
+    var value: T{
+        didSet{
+            self.notifyEmployees()
         }
-
-    required init(numberOfBooks: Int) {
-        self.numberOfBooks = numberOfBooks
     }
     
-    func addEmployee(_ employee: BookAgencyEmployee) {
-        employees.append({ [weak employee] in return employee })
-    }
-    
-    func removeEmployee(_ employee: BookAgencyEmployee) {
-        guard let index = self.employees.firstIndex(where: { $0()?.employeeNumber == employee.employeeNumber }) else { return }
-                self.employees.remove(at: index)
-    }
-    
-    func receiveABook() {
-        numberOfBooks += 1
+    init(value: T) {
+        self.value = value
     }
     
     func notifyEmployees() {
-        employees.forEach({$0()?.numberOfBooksIncreased()})
+        self.employees.forEach({ $0.value?.numberOfBooksChanged(value)})
     }
     
-    deinit {
-            employees.removeAll()
+    func addEmployee(_ employee: BasicEmployee) {
+        //Проверка, нет ли в массиве наблюдателя с таким же ID.
+        guard self.employees.contains(where: { $0.value?.employeeID == employee.employeeID }) == false else {
+            return
         }
+        self.employees.append(Weak(value: employee))
+    }
+    
+    func removeEmployee(_ employee: BookAgencyEmployee) {
+        guard let index = self.employees.firstIndex(where: { $0.value?.employeeID == employee.employeeID }) else { return }
+        self.employees.remove(at: index)
+    }
+
 }
 
-class GramaryChecker: GramaryCheckerProtocol, BookAgencyEmployee{
-    var employeeNumber: Int?
+class BookAgency{
+    var numberOfBooks: ObservableClass<Int>
     
-    required init(employeeNumber: Int) {
-        self.employeeNumber = employeeNumber
+    init(numberOfBooks: Int) {
+        self.numberOfBooks = ObservableClass(value: numberOfBooks)
     }
+    
+    func receiveABookFromWriter() {
+        numberOfBooks.value += 1
+    }
+}
 
-    func numberOfBooksIncreased() {
+//Протокол для Наблюдателя. Текстовая переменная добавлена для того чтобы их было проще удалять. Также содержит метод, срабатывающий при изменении переменной в Объекте.
+protocol BookAgencyEmployee: AnyObject {
+    var employeeID: String? { get set }
+    
+    init(employeeID: String)
+    
+    func numberOfBooksChanged(_ value: Any?)
+}
+
+protocol GramaryCheckerProtocol: AnyObject {
+    func checkGramary() -> GramaryCheckResults
+}
+
+protocol BookPublisherProtocol: AnyObject {
+    func publish(_  value: Any?)
+}
+
+//Базовая реализация протокола Наблюдателя. Сюда вынесен общий для всех наблюдателей процесс инициализации. Также класс необходим для создания массива слабых ссылок.
+class BasicEmployee: BookAgencyEmployee {
+    var employeeID: String?
+    
+    required init(employeeID: String) {
+        self.employeeID = employeeID
+    }
+    
+    func numberOfBooksChanged(_ value: Any?) {
+        // override in future implementations
+        return
+    }
+}
+
+class GramaryChecker: BasicEmployee, GramaryCheckerProtocol{
+
+    override func numberOfBooksChanged(_ value: Any?) {
         checkGramary()
     }
     
@@ -84,31 +101,36 @@ class GramaryChecker: GramaryCheckerProtocol, BookAgencyEmployee{
         return GramaryCheckResults.correct
     }
 }
-class Publisher: BookPublisherProtocol, BookAgencyEmployee{
-    var employeeNumber: Int?
+class Publisher: BasicEmployee, BookPublisherProtocol {
     
-    required init(employeeNumber: Int) {
-        self.employeeNumber = employeeNumber
+    override func numberOfBooksChanged(_ value: Any?) {
+        publish(value)
     }
     
-    func numberOfBooksIncreased() {
-        publish()
-    }
-    
-    func publish() {
-        print("Published a new book")
+    func publish(_ value: Any?) {
+        print("Published a new book. Now we have a total of \(String(describing: value)) books published")
     }
 }
 enum GramaryCheckResults {
-case correct
-case containsErrors
+    case correct
+    case containsErrors
 }
 
-let gramaryChecker = GramaryChecker(employeeNumber: 4576)
-let publisher = Publisher(employeeNumber: 7622)
+//Обёртка для Наблюдателей, делает их слабыми ссылками.
+class Weak<T: AnyObject> {
+  weak var value : T?
+  init (value: T) {
+    self.value = value
+  }
+}
+
+let gramaryChecker = GramaryChecker(employeeID: "4576")
+let publisher = Publisher(employeeID: "7622")
+let publisherCopycat = Publisher(employeeID: "7622")
 let agency = BookAgency(numberOfBooks: 0)
-agency.addEmployee(gramaryChecker)
-agency.addEmployee(publisher)
+agency.numberOfBooks.addEmployee(gramaryChecker)
+agency.numberOfBooks.addEmployee(publisher)
+agency.numberOfBooks.addEmployee(publisherCopycat)
 let writer = Writer()
 writer.agency = agency
 writer.writeABook()
