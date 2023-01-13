@@ -14,7 +14,7 @@ protocol ObservableProtocol {
     func removeObserver(_ id: String)
 }
 
-//Реализация протокола для Объекта. Работает с generic'ами.
+//Реализация протокола для Объекта.
 class ObservableClass: ObservableProtocol {
     //Словарь для Наблюдателей
     private var observersDict: [String : () -> ObserverProtocol?] = [:]
@@ -35,7 +35,7 @@ class ObservableClass: ObservableProtocol {
     }
     
     func addObserver(_ observer: ObserverProtocol) {
-        //Проверка, нет ли в массиве наблюдателя с таким же ID.
+        //Проверка, нет ли в словаре наблюдателя с таким же ID.
         if !observersDict.keys.contains(observer.observerID) {
             observersDict[observer.observerID] = ({ [weak observer] in return observer})
         }
