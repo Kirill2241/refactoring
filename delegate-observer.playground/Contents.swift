@@ -8,36 +8,34 @@ class Writer {
     }
 }
 
-//Протокол для Объекта. Содержит возможность добавить Наблюдателя или удалить его.
-protocol ObservableProtocol {
-    func addObserver(_ observer: ObserverProtocol)
-    func removeObserver(_ id: String)
-}
-
-//Реализация протокола для Объекта.
-class ObservableClass: ObservableProtocol {
-    //Словарь для Наблюдателей
-    private var observersDict: [String : () -> ObserverProtocol?] = [:]
-    //Переменная, за которой "ведётся наблюдение". Защищена private чтобы избежать изменения за пределами класса.
-    private var value: Int {
+//Класс для Объекта Наблюдения. Поддерживает дженерики.
+class ObservableClass<T> {
+    
+    //Переменная, за которой "ведётся наблюдение".
+    var value: T {
         didSet {
-            self.notifyObservers()
+            observersDict.forEach({
+                $0.value(value)
+            })
         }
     }
     
-    init(value: Int) {
-        self.value = value
-    }
+    //Инициализация переменной
+    init(value: T) { self.value = value }
+    //Словарь для Наблюдателей. В качестве значений выступают кложуры
+    private var observersDict: [String : (T) -> Void] = [:]
     
-    //Функция, ответственная за ""уведомление" Наблюдателей.
-    private func notifyObservers() {
-        observersDict.values.forEach({$0()?.valueChanged(value)})
-    }
-    
-    func addObserver(_ observer: ObserverProtocol) {
+    func addObserver(id: String, observerHandler: @escaping((T) -> Void)) {
         //Проверка, нет ли в словаре наблюдателя с таким же ID.
-        if !observersDict.keys.contains(observer.observerID) {
-            observersDict[observer.observerID] = ({ [weak observer] in return observer})
+        if !observersDict.keys.contains(id) {
+            observersDict[id] = observerHandler
+        }
+    }
+    
+    func addObserverAndNotify(id: String, observerHandler: @escaping((T) -> Void)) {
+        if !observersDict.keys.contains(id) {
+            observersDict[id] = observerHandler
+            observerHandler(value)
         }
     }
     
@@ -45,25 +43,19 @@ class ObservableClass: ObservableProtocol {
         observersDict.removeValue(forKey: id)
     }
     
-    func increaseValue(number: Int) {
-        value += number
-    }
 }
 
-class BookAgency: ObservableClass {
+class BookAgency {
+    
+    var numberOfBooks: ObservableClass<Int>
+    
+    init(numberOfBooks: Int){
+        self.numberOfBooks = ObservableClass(value: numberOfBooks)
+    }
     
     func receiveABookFromWriter() {
-        increaseValue(number: 1)
+        numberOfBooks.value += 1
     }
-}
-
-//Протокол для Наблюдателя. Текстовая переменная добавлена для того чтобы можно было создать словарь на основе ID и самого экземпляра протокола. Также содержит метод, срабатывающий при изменении переменной в Объекте.
-protocol ObserverProtocol: AnyObject {
-    var observerID: String { get }
-    
-    init(observerID: String)
-    
-    func valueChanged(_ value: Int)
 }
 
 protocol GramaryCheckerProtocol {
@@ -75,36 +67,22 @@ protocol BookPublisherProtocol {
 }
 
 //Базовая реализация протокола Наблюдателя. Сюда вынесен общий для всех наблюдателей процесс инициализации.
-class BaseObserver: ObserverProtocol {
-    var observerID: String
+class BaseEmployee {
+    var employeeID: String
     
-    required init(observerID: String) {
-        self.observerID = observerID
+    required init(employeeID: String) {
+        self.employeeID = employeeID
     }
-    
-    func valueChanged(_ value: Int) {
-        // override in future implementations
-        return
-    }
+
 }
 
-class GramaryChecker: BaseObserver, GramaryCheckerProtocol {
-
-    override func valueChanged(_ value: Int) {
-        checkGramary()
-    }
-    
+class GramaryChecker: BaseEmployee, GramaryCheckerProtocol {
     func checkGramary() -> GramaryCheckResults {
         return GramaryCheckResults.correct
     }
 }
 
-class Publisher: BaseObserver, BookPublisherProtocol {
-    
-    override func valueChanged(_ value: Int) {
-        publish(value)
-    }
-    
+class Publisher: BaseEmployee, BookPublisherProtocol {
     func publish(_ numberOfBooks: Int) {
         print("Published a new book. Now we have a total of \(String(describing: numberOfBooks)) books published")
     }
@@ -115,16 +93,25 @@ enum GramaryCheckResults {
     case containsErrors
 }
 
-let gramaryChecker = GramaryChecker(observerID: "4576")
-let publisher = Publisher(observerID: "7622")
-let publisherCopycat = Publisher(observerID: "7622")
-let secondGramaryChecker = GramaryChecker(observerID: "gfevue")
-let agency = BookAgency(value: 0)
-agency.addObserver(gramaryChecker)
-agency.addObserver(publisher)
-agency.addObserver(publisherCopycat)
-agency.addObserver(secondGramaryChecker)
-agency.removeObserver(secondGramaryChecker.observerID)
+let gramaryChecker = GramaryChecker(employeeID: "4576")
+let publisher = Publisher(employeeID: "7622")
+let publisherCopycat = Publisher(employeeID: "7622")
+let secondGramaryChecker = GramaryChecker(employeeID: "gfevue")
+let agency = BookAgency(numberOfBooks: 0)
+// Реализация кложуров
+agency.numberOfBooks.addObserver(id: gramaryChecker.employeeID) { _ in
+    let _ = gramaryChecker.checkGramary()
+}
+agency.numberOfBooks.addObserver(id: publisher.employeeID) { _ in
+    publisher.publish(agency.numberOfBooks.value)
+}
+agency.numberOfBooks.addObserverAndNotify(id: publisherCopycat.employeeID) { _ in
+    publisherCopycat.publish(agency.numberOfBooks.value)
+}
+agency.numberOfBooks.addObserver(id: secondGramaryChecker.employeeID) { _ in
+    let _ = secondGramaryChecker.checkGramary()
+}
+agency.numberOfBooks.removeObserver(secondGramaryChecker.employeeID)
 let writer = Writer()
 writer.agency = agency
 writer.writeABook()
