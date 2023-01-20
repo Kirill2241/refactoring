@@ -25,14 +25,14 @@ class ObservableClass<T> {
     //Словарь для Наблюдателей. В качестве значений выступают кложуры
     private var observersDict: [String : (T) -> Void] = [:]
     
-    func addObserver(id: String, observerHandler: @escaping((T) -> Void)) {
+    func addObserverIfDoesNotExist(id: String, observerHandler: @escaping((T) -> Void)) {
         //Проверка, нет ли в словаре наблюдателя с таким же ID.
         if !observersDict.keys.contains(id) {
             observersDict[id] = observerHandler
         }
     }
     
-    func addObserverAndNotify(id: String, observerHandler: @escaping((T) -> Void)) {
+    func addObserverAndNotifyIfDoesNotExist(id: String, observerHandler: @escaping((T) -> Void)) {
         if !observersDict.keys.contains(id) {
             observersDict[id] = observerHandler
             observerHandler(value)
@@ -98,17 +98,17 @@ let publisher = Publisher(employeeID: "7622")
 let publisherCopycat = Publisher(employeeID: "7622")
 let secondGramaryChecker = GramaryChecker(employeeID: "gfevue")
 let agency = BookAgency(numberOfBooks: 0)
-// Реализация кложуров
-agency.numberOfBooks.addObserver(id: gramaryChecker.employeeID) { _ in
+// Реализация кложуров, слабые ссылки
+agency.numberOfBooks.addObserverIfDoesNotExist(id: gramaryChecker.employeeID) { [ weak self ] in
     let _ = gramaryChecker.checkGramary()
 }
-agency.numberOfBooks.addObserver(id: publisher.employeeID) { _ in
+agency.numberOfBooks.addObserverIfDoesNotExist(id: publisher.employeeID) { [ weak self ] in
     publisher.publish(agency.numberOfBooks.value)
 }
-agency.numberOfBooks.addObserverAndNotify(id: publisherCopycat.employeeID) { _ in
+agency.numberOfBooks.addObserverAndNotify(id: publisherCopycat.employeeID) { [ weak self ] in
     publisherCopycat.publish(agency.numberOfBooks.value)
 }
-agency.numberOfBooks.addObserver(id: secondGramaryChecker.employeeID) { _ in
+agency.numberOfBooks.addObserver(id: secondGramaryChecker.employeeID) { [ weak self ] in
     let _ = secondGramaryChecker.checkGramary()
 }
 agency.numberOfBooks.removeObserver(secondGramaryChecker.employeeID)
